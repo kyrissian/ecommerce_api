@@ -106,9 +106,9 @@ This automatically creates all tables (`user`, `product`, `order`, `order_produc
 ```json
 POST /users
 {
-  "name": "Ada Lovelace",
-  "address": "123 Main St",
-  "email": "ada@example.com"
+  "name": "Rita Cascia",
+  "address": "123 Heaven Blvd",
+  "email": "StRita@example.com"
 }
 ```
 
