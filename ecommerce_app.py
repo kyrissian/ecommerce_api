@@ -7,12 +7,17 @@ e-commerce system, using Flask-SQLAlchemy for the database and
 Flask-Marshmallow for serializing data to/from JSON.
 """
 
+import os
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://root:gimeDAl00t!@localhost/ecommerce_api'
+db_password = os.environ.get('DB_PASSWORD')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+mysqlconnector://root:{db_password}@localhost/ecommerce_api'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
