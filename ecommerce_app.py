@@ -402,6 +402,54 @@ def create_order():
     return jsonify(order_schema.dump(new_order)), 201
 
 
+@app.route('/orders/<int:order_id>', methods=['GET'])
+def get_order(order_id):
+    """Retrieve a single order by its ID.
+
+    Args:
+        order_id (int): The ID of the order to retrieve.
+
+    Returns:
+        Response: JSON object of the order with HTTP 200, or an error
+        message with HTTP 404 if the order does not exist.
+    """
+    order = db.session.get(Order, order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+    return jsonify(order_schema.dump(order)), 200
+
+
+@app.route('/orders', methods=['GET'])
+def get_orders():
+    """Retrieve all orders in the system.
+
+    Returns:
+        Response: JSON array of all orders with HTTP 200.
+    """
+    all_orders = Order.query.all()
+    return jsonify(orders_schema.dump(all_orders)), 200
+
+
+@app.route('/orders/<int:order_id>', methods=['DELETE'])
+def delete_order(order_id):
+    """Delete an order by its ID.
+
+    Args:
+        order_id (int): The ID of the order to delete.
+
+    Returns:
+        Response: Success message with HTTP 200, or an error message
+        with HTTP 404 if the order does not exist.
+    """
+    order = db.session.get(Order, order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    db.session.delete(order)
+    db.session.commit()
+    return jsonify({'message': f'Order {order_id} deleted successfully'}), 200
+
+
 @app.route('/orders/<int:order_id>/add_product/<int:product_id>', methods=['PUT'])
 def add_product_to_order(order_id, product_id):
     """Add a product to an existing order, preventing duplicate entries.
@@ -430,6 +478,24 @@ def add_product_to_order(order_id, product_id):
     db.session.commit()
     return jsonify(order_schema.dump(order)), 200
 
+
+@app.route('/orders/<int:order_id>/total', methods=['GET'])
+def get_order_total(order_id):
+    """Calculate the total price of all products in an order.
+
+    Args:
+        order_id (int): The ID of the order.
+
+    Returns:
+        Response: JSON object with order_id and total_price, HTTP 200,
+        or an error message with HTTP 404 if the order does not exist.
+    """
+    order = db.session.get(Order, order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    total_price = sum(product.price for product in order.products)
+    return jsonify({'order_id': order_id, 'total_price': round(total_price, 2)}), 200
 
 
 @app.route('/orders/<int:order_id>/remove_product/<int:product_id>', methods=['DELETE'])
