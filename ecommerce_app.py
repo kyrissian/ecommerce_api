@@ -180,6 +180,28 @@ def get_user(user_id):
     return jsonify(user_schema.dump(user)), 200
 
 
+@app.route('/users/paginated', methods=['GET'])
+def get_users_paginated():
+    """Retrieve users with pagination support.
+
+    Query Params:
+        page (int): Page number, default 1.
+        per_page (int): Number of results per page, default 10.
+
+    Returns:
+        Response: JSON object with users, total, page, and per_page fields, HTTP 200.
+    """
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    pagination = User.query.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        'users': users_schema.dump(pagination.items),
+        'total': pagination.total,
+        'page': page,
+        'per_page': per_page
+    }), 200
+
 
 @app.route('/users/<int:user_id>', methods=['PUT'])
 def update_user(user_id):
@@ -242,6 +264,29 @@ def get_products():
     """
     all_products = Product.query.all()
     return jsonify(products_schema.dump(all_products)), 200
+
+
+@app.route('/products/paginated', methods=['GET'])
+def get_products_paginated():
+    """Retrieve products with pagination support.
+
+    Query Params:
+        page (int): Page number, default 1.
+        per_page (int): Number of results per page, default 10.
+
+    Returns:
+        Response: JSON object with products, total, page, and per_page fields, HTTP 200.
+    """
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    pagination = Product.query.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        'products': products_schema.dump(pagination.items),
+        'total': pagination.total,
+        'page': page,
+        'per_page': per_page
+    }), 200
 
 
 @app.route('/products/<int:product_id>', methods=['GET'])
