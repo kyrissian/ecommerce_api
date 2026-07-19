@@ -11,6 +11,7 @@ import os
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
+from marshmallow import fields, validate, ValidationError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -82,11 +83,16 @@ class Order(db.Model):
     products = db.relationship('Product', secondary=order_product, back_populates='orders')
 
 
+# Schemas for serializing and deserializing models using Marshmallow
 class UserSchema(ma.SQLAlchemyAutoSchema):
     """Schema for serializing/deserializing User objects."""
     class Meta:
         """Configuration telling Marshmallow which model to build the schema from."""
         model = User
+
+    name = fields.String(required=True, validate=validate.Length(min=1, max=200))
+    address = fields.String(required=True, validate=validate.Length(min=1, max=300))
+    email = fields.Email(required=True)
 
 
 class ProductSchema(ma.SQLAlchemyAutoSchema):
@@ -94,6 +100,9 @@ class ProductSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         """Configuration telling Marshmallow which model to build the schema from."""
         model = Product
+
+    product_name = fields.String(required=True, validate=validate.Length(min=1, max=200))
+    price = fields.Float(required=True, validate=validate.Range(min=0))
 
 
 class OrderSchema(ma.SQLAlchemyAutoSchema):
@@ -107,6 +116,9 @@ class OrderSchema(ma.SQLAlchemyAutoSchema):
         with include_fk=True so foreign key fields are included."""
         model = Order
         include_fk = True
+
+    order_date = fields.DateTime(required=True)
+    user_id = fields.Integer(required=True)
 
 
 user_schema = UserSchema()
@@ -137,9 +149,14 @@ def create_user():
     Expects a JSON body with name, address, and email.
 
     Returns:
-        Response: JSON object of the newly created user with HTTP 201.
+        Response: JSON object of the newly created user with HTTP 201,
+        or validation errors with HTTP 400.
     """
-    data = request.json
+    try:
+        data = user_schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
     new_user = User(name=data['name'], address=data['address'], email=data['email'])
     db.session.add(new_user)
     db.session.commit()
@@ -173,13 +190,17 @@ def update_user(user_id):
 
     Returns:
         Response: JSON object of the updated user with HTTP 200,
-        or an error message with HTTP 404 if the user does not exist.
+        validation errors with HTTP 400, or HTTP 404 if not found.
     """
     user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    data = request.json
+    try:
+        data = user_schema.load(request.json, partial=True)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
     if 'name' in data:
         user.name = data['name']
     if 'address' in data:
@@ -247,9 +268,14 @@ def create_product():
     Expects a JSON body with product_name and price.
 
     Returns:
-        Response: JSON object of the newly created product with HTTP 201.
+        Response: JSON object of the newly created product with HTTP 201,
+        or validation errors with HTTP 400.
     """
-    data = request.json
+    try:
+        data = product_schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
     new_product = Product(product_name=data['product_name'], price=data['price'])
     db.session.add(new_product)
     db.session.commit()
@@ -265,13 +291,17 @@ def update_product(product_id):
 
     Returns:
         Response: JSON object of the updated product with HTTP 200,
-        or an error message with HTTP 404 if the product does not exist.
+        validation errors with HTTP 400, or HTTP 404 if not found.
     """
     product = db.session.get(Product, product_id)
     if not product:
         return jsonify({'error': 'Product not found'}), 404
 
-    data = request.json
+    try:
+        data = product_schema.load(request.json, partial=True)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
     if 'product_name' in data:
         product.product_name = data['product_name']
     if 'price' in data:
@@ -310,9 +340,12 @@ def create_order():
 
     Returns:
         Response: JSON object of the newly created order with HTTP 201,
-        or an error message with HTTP 404 if the user does not exist.
+        validation errors with HTTP 400, or HTTP 404 if the user does not exist.
     """
-    data = request.json
+    try:
+        data = order_schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
 
     user = db.session.get(User, data['user_id'])
     if not user:
