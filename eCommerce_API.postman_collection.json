@@ -35,7 +35,7 @@
         "header": [],
         "body": {
           "mode": "raw",
-          "raw": "{\r\n     \"name\": \"Kathy Booth\",\r\n     \"address\": \"67 Kids St\",\r\n     \"email\": \"kathy@example.com\"\r\n   }",
+          "raw": "{\r\n     \"name\": \"Fresh Testuser\",\r\n     \"address\": \"22 Sample Ave\",\r\n     \"email\": \"freshuser@example.com\",\r\n     \"password\": \"testpass123\"\r\n   }",
           "options": {
             "raw": {
               "language": "json"
@@ -535,7 +535,7 @@
     {
       "name": "Delete Order",
       "request": {
-        "method": "GET",
+        "method": "DELETE",
         "header": [],
         "url": {
           "raw": "http://127.0.0.1:5000/orders/1",
@@ -550,6 +550,37 @@
           "path": [
             "orders",
             "1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "   {\r\n     \"email\": \"freshuser@example.com\",\r\n     \"password\": \"testpass123\"\r\n   }",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://127.0.0.1:5000/login",
+          "protocol": "http",
+          "host": [
+            "127",
+            "0",
+            "0",
+            "1"
+          ],
+          "port": "5000",
+          "path": [
+            "login"
           ]
         }
       },

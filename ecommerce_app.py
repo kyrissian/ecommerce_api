@@ -12,6 +12,8 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from marshmallow import fields, validate, ValidationError
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,6 +25,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 ma = Marshmallow(app)
+
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-secret-change-me')
+jwt = JWTManager(app)
 
 
 order_product = db.Table(
@@ -45,8 +50,9 @@ class User(db.Model):
     name = db.Column(db.String(200), nullable=False)
     address = db.Column(db.String(300), nullable=False)
     email = db.Column(db.String(200), unique=True, nullable=False)
+    password_hash = db.Column(db.String(300), nullable=False)
 
-    orders = db.relationship('Order', back_populates='user')
+    orders = db.relationship('Order', back_populates='user', cascade='all, delete-orphan')
 
 
 class Product(db.Model):
@@ -87,12 +93,15 @@ class Order(db.Model):
 class UserSchema(ma.SQLAlchemyAutoSchema):
     """Schema for serializing/deserializing User objects."""
     class Meta:
-        """Configuration telling Marshmallow which model to build the schema from."""
+        """Configuration telling Marshmallow which model to build the schema from,
+        excluding password_hash since passwords are handled separately for security."""
         model = User
+        exclude = ('password_hash',)
 
     name = fields.String(required=True, validate=validate.Length(min=1, max=200))
     address = fields.String(required=True, validate=validate.Length(min=1, max=300))
     email = fields.Email(required=True)
+    password = fields.String(required=True, load_only=True, validate=validate.Length(min=6))
 
 
 class ProductSchema(ma.SQLAlchemyAutoSchema):
@@ -146,7 +155,7 @@ def get_users():
 def create_user():
     """Create a new user.
 
-    Expects a JSON body with name, address, and email.
+    Expects a JSON body with name, address, email, and password.
 
     Returns:
         Response: JSON object of the newly created user with HTTP 201,
@@ -157,10 +166,36 @@ def create_user():
     except ValidationError as err:
         return jsonify(err.messages), 400
 
-    new_user = User(name=data['name'], address=data['address'], email=data['email'])
+    hashed_password = generate_password_hash(data['password'])
+    new_user = User(
+        name=data['name'],
+        address=data['address'],
+        email=data['email'],
+        password_hash=hashed_password
+    )
     db.session.add(new_user)
     db.session.commit()
     return jsonify(user_schema.dump(new_user)), 201
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    """Authenticate a user and return a JWT access token.
+
+    Expects a JSON body with email and password.
+
+    Returns:
+        Response: JSON object containing an access_token with HTTP 200,
+        or an error message with HTTP 401 if credentials are invalid.
+    """
+    data = request.json
+    user = User.query.filter_by(email=data.get('email')).first()
+
+    if not user or not check_password_hash(user.password_hash, data.get('password', '')):
+        return jsonify({'error': 'Invalid email or password'}), 401
+
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify({'access_token': access_token}), 200
 
 
 @app.route('/users/<int:user_id>', methods=['GET'])
@@ -235,16 +270,24 @@ def update_user(user_id):
 
 
 @app.route('/users/<int:user_id>', methods=['DELETE'])
+@jwt_required()
 def delete_user(user_id):
-    """Delete a user by their ID.
+    """Delete a user by their ID. Requires a valid JWT access token,
+    and a user may only delete their own account.
 
     Args:
         user_id (int): The ID of the user to delete.
 
     Returns:
-        Response: Success message with HTTP 200, or an error message
-        with HTTP 404 if the user does not exist.
+        Response: Success message with HTTP 200, an error message
+        with HTTP 404 if the user does not exist, HTTP 401 if no
+        valid token is provided, or HTTP 403 if the logged-in user
+        is trying to delete someone else's account.
     """
+    current_user_id = get_jwt_identity()
+    if str(user_id) != current_user_id:
+        return jsonify({'error': 'You can only delete your own account'}), 403
+
     user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
