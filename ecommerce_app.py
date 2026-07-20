@@ -151,6 +151,46 @@ def get_users():
     return jsonify(users_schema.dump(all_users)), 200
 
 
+@app.route('/users/paginated', methods=['GET'])
+def get_users_paginated():
+    """Retrieve users with pagination support.
+
+    Query Params:
+        page (int): Page number, default 1.
+        per_page (int): Number of results per page, default 10.
+
+    Returns:
+        Response: JSON object with users, total, page, and per_page fields, HTTP 200.
+    """
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    pagination = User.query.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        'users': users_schema.dump(pagination.items),
+        'total': pagination.total,
+        'page': page,
+        'per_page': per_page
+    }), 200
+
+
+@app.route('/users/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    """Retrieve a single user by their ID.
+
+    Args:
+        user_id (int): The ID of the user to retrieve.
+
+    Returns:
+        Response: JSON object of the user with HTTP 200, or an error
+        message with HTTP 404 if the user does not exist.
+    """
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    return jsonify(user_schema.dump(user)), 200
+
+
 @app.route('/users', methods=['POST'])
 def create_user():
     """Create a new user.
@@ -176,66 +216,6 @@ def create_user():
     db.session.add(new_user)
     db.session.commit()
     return jsonify(user_schema.dump(new_user)), 201
-
-
-@app.route('/login', methods=['POST'])
-def login():
-    """Authenticate a user and return a JWT access token.
-
-    Expects a JSON body with email and password.
-
-    Returns:
-        Response: JSON object containing an access_token with HTTP 200,
-        or an error message with HTTP 401 if credentials are invalid.
-    """
-    data = request.json
-    user = User.query.filter_by(email=data.get('email')).first()
-
-    if not user or not check_password_hash(user.password_hash, data.get('password', '')):
-        return jsonify({'error': 'Invalid email or password'}), 401
-
-    access_token = create_access_token(identity=str(user.id))
-    return jsonify({'access_token': access_token}), 200
-
-
-@app.route('/users/<int:user_id>', methods=['GET'])
-def get_user(user_id):
-    """Retrieve a single user by their ID.
-
-    Args:
-        user_id (int): The ID of the user to retrieve.
-
-    Returns:
-        Response: JSON object of the user with HTTP 200, or an error
-        message with HTTP 404 if the user does not exist.
-    """
-    user = db.session.get(User, user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    return jsonify(user_schema.dump(user)), 200
-
-
-@app.route('/users/paginated', methods=['GET'])
-def get_users_paginated():
-    """Retrieve users with pagination support.
-
-    Query Params:
-        page (int): Page number, default 1.
-        per_page (int): Number of results per page, default 10.
-
-    Returns:
-        Response: JSON object with users, total, page, and per_page fields, HTTP 200.
-    """
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-
-    pagination = User.query.paginate(page=page, per_page=per_page, error_out=False)
-    return jsonify({
-        'users': users_schema.dump(pagination.items),
-        'total': pagination.total,
-        'page': page,
-        'per_page': per_page
-    }), 200
 
 
 @app.route('/users/<int:user_id>', methods=['PUT'])
@@ -296,6 +276,25 @@ def delete_user(user_id):
     db.session.commit()
     return jsonify({'message': f'User {user_id} deleted successfully'}), 200
 
+
+@app.route('/login', methods=['POST'])
+def login():
+    """Authenticate a user and return a JWT access token.
+
+    Expects a JSON body with email and password.
+
+    Returns:
+        Response: JSON object containing an access_token with HTTP 200,
+        or an error message with HTTP 401 if credentials are invalid.
+    """
+    data = request.json
+    user = User.query.filter_by(email=data.get('email')).first()
+
+    if not user or not check_password_hash(user.password_hash, data.get('password', '')):
+        return jsonify({'error': 'Invalid email or password'}), 401
+
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify({'access_token': access_token}), 200
 
 
 @app.route('/products', methods=['GET'])
@@ -419,30 +418,15 @@ def delete_product(product_id):
     return jsonify({'message': f'Product {product_id} deleted successfully'}), 200
 
 
-@app.route('/orders', methods=['POST'])
-def create_order():
-    """Create a new order for a user.
-
-    Expects a JSON body with user_id and order_date
-    (ISO format, e.g. "2026-07-17T10:00:00").
+@app.route('/orders', methods=['GET'])
+def get_orders():
+    """Retrieve all orders in the system.
 
     Returns:
-        Response: JSON object of the newly created order with HTTP 201,
-        validation errors with HTTP 400, or HTTP 404 if the user does not exist.
+        Response: JSON array of all orders with HTTP 200.
     """
-    try:
-        data = order_schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 400
-
-    user = db.session.get(User, data['user_id'])
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    new_order = Order(user_id=data['user_id'], order_date=data['order_date'])
-    db.session.add(new_order)
-    db.session.commit()
-    return jsonify(order_schema.dump(new_order)), 201
+    all_orders = Order.query.all()
+    return jsonify(orders_schema.dump(all_orders)), 200
 
 
 @app.route('/orders/<int:order_id>', methods=['GET'])
@@ -459,66 +443,6 @@ def get_order(order_id):
     order = db.session.get(Order, order_id)
     if not order:
         return jsonify({'error': 'Order not found'}), 404
-    return jsonify(order_schema.dump(order)), 200
-
-
-@app.route('/orders', methods=['GET'])
-def get_orders():
-    """Retrieve all orders in the system.
-
-    Returns:
-        Response: JSON array of all orders with HTTP 200.
-    """
-    all_orders = Order.query.all()
-    return jsonify(orders_schema.dump(all_orders)), 200
-
-
-@app.route('/orders/<int:order_id>', methods=['DELETE'])
-def delete_order(order_id):
-    """Delete an order by its ID.
-
-    Args:
-        order_id (int): The ID of the order to delete.
-
-    Returns:
-        Response: Success message with HTTP 200, or an error message
-        with HTTP 404 if the order does not exist.
-    """
-    order = db.session.get(Order, order_id)
-    if not order:
-        return jsonify({'error': 'Order not found'}), 404
-
-    db.session.delete(order)
-    db.session.commit()
-    return jsonify({'message': f'Order {order_id} deleted successfully'}), 200
-
-
-@app.route('/orders/<int:order_id>/add_product/<int:product_id>', methods=['PUT'])
-def add_product_to_order(order_id, product_id):
-    """Add a product to an existing order, preventing duplicate entries.
-
-    Args:
-        order_id (int): The ID of the order.
-        product_id (int): The ID of the product to add.
-
-    Returns:
-        Response: JSON object of the updated order with HTTP 200,
-        an error if the product is already in the order (HTTP 400),
-        or HTTP 404 if the order or product does not exist.
-    """
-    order = db.session.get(Order, order_id)
-    if not order:
-        return jsonify({'error': 'Order not found'}), 404
-
-    product = db.session.get(Product, product_id)
-    if not product:
-        return jsonify({'error': 'Product not found'}), 404
-
-    if product in order.products:
-        return jsonify({'error': 'Product already exists in this order'}), 400
-
-    order.products.append(product)
-    db.session.commit()
     return jsonify(order_schema.dump(order)), 200
 
 
@@ -539,34 +463,6 @@ def get_order_total(order_id):
 
     total_price = sum(product.price for product in order.products)
     return jsonify({'order_id': order_id, 'total_price': round(total_price, 2)}), 200
-
-
-@app.route('/orders/<int:order_id>/remove_product/<int:product_id>', methods=['DELETE'])
-def remove_product_from_order(order_id, product_id):
-    """Remove a product from an existing order.
-
-    Args:
-        order_id (int): The ID of the order.
-        product_id (int): The ID of the product to remove.
-
-    Returns:
-        Response: JSON object of the updated order with HTTP 200,
-        or HTTP 404 if the order, product, or association is not found.
-    """
-    order = db.session.get(Order, order_id)
-    if not order:
-        return jsonify({'error': 'Order not found'}), 404
-
-    product = db.session.get(Product, product_id)
-    if not product:
-        return jsonify({'error': 'Product not found'}), 404
-
-    if product not in order.products:
-        return jsonify({'error': 'Product is not in this order'}), 404
-
-    order.products.remove(product)
-    db.session.commit()
-    return jsonify(order_schema.dump(order)), 200
 
 
 @app.route('/orders/user/<int:user_id>', methods=['GET'])
@@ -604,6 +500,108 @@ def get_products_for_order(order_id):
 
     return jsonify(products_schema.dump(order.products)), 200
 
+
+@app.route('/orders', methods=['POST'])
+def create_order():
+    """Create a new order for a user.
+
+    Expects a JSON body with user_id and order_date
+    (ISO format, e.g. "2026-07-17T10:00:00").
+
+    Returns:
+        Response: JSON object of the newly created order with HTTP 201,
+        validation errors with HTTP 400, or HTTP 404 if the user does not exist.
+    """
+    try:
+        data = order_schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+
+    user = db.session.get(User, data['user_id'])
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    new_order = Order(user_id=data['user_id'], order_date=data['order_date'])
+    db.session.add(new_order)
+    db.session.commit()
+    return jsonify(order_schema.dump(new_order)), 201
+
+
+@app.route('/orders/<int:order_id>/add_product/<int:product_id>', methods=['PUT'])
+def add_product_to_order(order_id, product_id):
+    """Add a product to an existing order, preventing duplicate entries.
+
+    Args:
+        order_id (int): The ID of the order.
+        product_id (int): The ID of the product to add.
+
+    Returns:
+        Response: JSON object of the updated order with HTTP 200,
+        an error if the product is already in the order (HTTP 400),
+        or HTTP 404 if the order or product does not exist.
+    """
+    order = db.session.get(Order, order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    product = db.session.get(Product, product_id)
+    if not product:
+        return jsonify({'error': 'Product not found'}), 404
+
+    if product in order.products:
+        return jsonify({'error': 'Product already exists in this order'}), 400
+
+    order.products.append(product)
+    db.session.commit()
+    return jsonify(order_schema.dump(order)), 200
+
+
+@app.route('/orders/<int:order_id>/remove_product/<int:product_id>', methods=['DELETE'])
+def remove_product_from_order(order_id, product_id):
+    """Remove a product from an existing order.
+
+    Args:
+        order_id (int): The ID of the order.
+        product_id (int): The ID of the product to remove.
+
+    Returns:
+        Response: JSON object of the updated order with HTTP 200,
+        or HTTP 404 if the order, product, or association is not found.
+    """
+    order = db.session.get(Order, order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    product = db.session.get(Product, product_id)
+    if not product:
+        return jsonify({'error': 'Product not found'}), 404
+
+    if product not in order.products:
+        return jsonify({'error': 'Product is not in this order'}), 404
+
+    order.products.remove(product)
+    db.session.commit()
+    return jsonify(order_schema.dump(order)), 200
+
+
+@app.route('/orders/<int:order_id>', methods=['DELETE'])
+def delete_order(order_id):
+    """Delete an order by its ID.
+
+    Args:
+        order_id (int): The ID of the order to delete.
+
+    Returns:
+        Response: Success message with HTTP 200, or an error message
+        with HTTP 404 if the order does not exist.
+    """
+    order = db.session.get(Order, order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    db.session.delete(order)
+    db.session.commit()
+    return jsonify({'message': f'Order {order_id} deleted successfully'}), 200
 
 
 if __name__ == '__main__':
